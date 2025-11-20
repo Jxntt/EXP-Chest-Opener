@@ -1,0 +1,11 @@
+{
+  "name": "EXP Chest Opener",
+  "version": "1.0.0",
+  "description": "Automatically open EXP Chests, created by @Jxnt",
+  "main": "script.js",
+  "dependencies": {
+    "discord.js-selfbot-v13": "^3.2.1",
+    "prompt-sync": "^4.2.0",
+    "adm-zip": "^0.5.10"
+  }
+}
