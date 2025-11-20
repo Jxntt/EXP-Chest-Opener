@@ -1,6 +1,6 @@
 {
   "name": "EXP Chest Opener",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automatically open EXP Chests, created by @Jxnt",
   "main": "script.js",
   "dependencies": {
@@ -8,4 +8,5 @@
     "prompt-sync": "^4.2.0",
     "adm-zip": "^0.5.10"
   }
+
 }
