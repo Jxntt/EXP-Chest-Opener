@@ -2,7 +2,7 @@ const { Client } = require("discord.js-selfbot-v13");
 const prompt = require("prompt-sync")({ sigint: true });
 const fs = require("fs");
 const path = require("path");
-const { CheckForUpdates } = require("./updater");
+//const { CheckForUpdates } = require("./updater");
 
 const CONFIG = {
   TOKEN: "",
@@ -623,3 +623,4 @@ client.on("ready", async () => {
     process.exit(1);
   }
 })();
+
