@@ -597,7 +597,7 @@ client.on("ready", async () => {
 
 (async () => {
   try {
-    await CheckForUpdates(prompt, false);
+    //await CheckForUpdates(prompt, false);
     CONFIG.TOKEN = await GetToken();
     console.log();
 
@@ -623,4 +623,5 @@ client.on("ready", async () => {
     process.exit(1);
   }
 })();
+
 
