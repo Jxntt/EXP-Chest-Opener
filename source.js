@@ -375,7 +375,7 @@ const GetToken = async () => {
     const token = AskHidden(`${COLORS.gray}Token:${COLORS.reset} `);
 
     if (!token?.trim()) {
-        console.log(`\n${COLORS.red}✗${COLORS.reset} Invalid token`);
+        console.log(`\n${COLORS.red}X${COLORS.reset} Invalid token`);
         process.exit(1);
     }
 
@@ -620,13 +620,13 @@ client.on("ready", async () => {
         client.login(CONFIG.TOKEN).then(() => {
             StopSpinner(spinner);
         }).catch((error) => {
-            StopSpinner(spinner, `${COLORS.red}✗${COLORS.reset} Login failed`);
+            StopSpinner(spinner, `${COLORS.red}X${COLORS.reset} Login failed`);
             console.log(`${COLORS.red}Error:${COLORS.reset} ${error.message}\n`);
             process.exit(1);
         });
 
     } catch (error) {
-        console.error(`\n${COLORS.red}✗${COLORS.reset} Error:`, error.message);
+        console.error(`\n${COLORS.red}X${COLORS.reset} Error:`, error.message);
         process.exit(1);
     }
 })();
