@@ -23,7 +23,7 @@ const HASH_FILE = path.join(DATA_DIR, "lastcommit.txt");
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
-const C = {
+const COLORS = {
     reset: "\x1b[0m",
     bright: "\x1b[1m",
     dim: "\x1b[2m",
@@ -57,82 +57,92 @@ const Stats = {
     ChestsRemaining: 0,
 };
 
-const client = new Client({
-    checkUpdate: false
-});
+const client = new Client({ checkUpdate: false });
 
-const Sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const ClearConsole = () => {
     process.stdout.write("\x1Bc");
     console.clear();
 };
-const Ask = (q) => prompt(q);
-const AskHidden = (q) => prompt(q, {
-    echo: "*"
-});
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-let spinIdx = 0;
-const ShowSpinner = (text) => setInterval(() => {
-    process.stdout.write(`\r${C.cyan}${SPINNER[spinIdx]} ${C.reset}${text}`);
-    spinIdx = (spinIdx + 1) % SPINNER.length;
-}, 80);
-const StopSpinner = (s, txt = "") => {
-    clearInterval(s);
+const Ask = (query) => prompt(query);
+const AskHidden = (query) => prompt(query, { echo: "*" });
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+let spinnerIndex = 0;
+
+const ShowSpinner = (text) => {
+    return setInterval(() => {
+        process.stdout.write(`\r${COLORS.cyan}${SPINNER_FRAMES[spinnerIndex]} ${COLORS.reset}${text}`);
+        spinnerIndex = (spinnerIndex + 1) % SPINNER_FRAMES.length;
+    }, 80);
+};
+
+const StopSpinner = (spinner, finalText = "") => {
+    clearInterval(spinner);
     process.stdout.write("\r\x1b[K");
-    if (txt) console.log(txt);
+    if (finalText) console.log(finalText);
 };
 
 const FormatTime = (ms) => {
-    const s = Math.floor(ms / 1000),
-        m = Math.floor(s / 60),
-        h = Math.floor(m / 60);
-    return `${h.toString().padStart(2, "0")}:${(m % 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    return `${hours.toString().padStart(2, "0")}:${(minutes % 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 };
-const FormatNumber = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-const FormatShort = (n) => n >= 1e9 ? `${(n/1e9).toFixed(2)}b` : n >= 1e6 ? `${(n/1e6).toFixed(2)}m` : n >= 1e3 ? `${(n/1e3).toFixed(2)}k` : n.toString();
 
-const HttpGet = (url) => new Promise((resolve, reject) => {
-    https.get(url, {
-        headers: {
-            "User-Agent": "EXP-Chest-Opener"
-        }
-    }, (res) => {
-        if (res.statusCode === 302 || res.statusCode === 301) return HttpGet(res.headers.location).then(resolve).catch(reject);
-        let data = "";
-        res.on("data", c => data += c);
-        res.on("end", () => resolve({
-            status: res.statusCode,
-            data
-        }));
-    }).on("error", reject);
-});
+const FormatNumber = (number) => {
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
 
-const DownloadFile = (url, dest) => new Promise((resolve, reject) => {
-    https.get(url, {
-        headers: {
-            "User-Agent": "EXP-Chest-Opener"
-        }
-    }, (res) => {
-        if (res.statusCode === 302 || res.statusCode === 301) return DownloadFile(res.headers.location, dest).then(resolve).catch(reject);
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
-        const file = fs.createWriteStream(dest);
-        res.pipe(file);
-        file.on("finish", () => {
-            file.close();
-            resolve();
-        });
-    }).on("error", reject);
-});
+const FormatShortNumber = (number) => {
+    if (number >= 1e9) return `${(number / 1e9).toFixed(2)}b`;
+    if (number >= 1e6) return `${(number / 1e6).toFixed(2)}m`;
+    if (number >= 1e3) return `${(number / 1e3).toFixed(2)}k`;
+    return number.toString();
+};
+
+const HttpGet = (url) => {
+    return new Promise((resolve, reject) => {
+        https.get(url, { headers: { "User-Agent": "EXP-Chest-Opener" } }, (response) => {
+            if (response.statusCode === 302 || response.statusCode === 301) {
+                return HttpGet(response.headers.location).then(resolve).catch(reject);
+            }
+            let data = "";
+            response.on("data", (chunk) => data += chunk);
+            response.on("end", () => resolve({ status: response.statusCode, data }));
+        }).on("error", reject);
+    });
+};
+
+const DownloadFile = (url, destination) => {
+    return new Promise((resolve, reject) => {
+        https.get(url, { headers: { "User-Agent": "EXP-Chest-Opener" } }, (response) => {
+            if (response.statusCode === 302 || response.statusCode === 301) {
+                return DownloadFile(response.headers.location, destination).then(resolve).catch(reject);
+            }
+            if (response.statusCode !== 200) {
+                return reject(new Error(`HTTP ${response.statusCode}`));
+            }
+            const file = fs.createWriteStream(destination);
+            response.pipe(file);
+            file.on("finish", () => {
+                file.close();
+                resolve();
+            });
+        }).on("error", reject);
+    });
+};
 
 const CheckForUpdates = async () => {
     try {
-        const res = await HttpGet(`https://api.github.com/repos/${GITHUB_REPO}/commits/${BRANCH}`);
-        if (res.status !== 200) return;
+        const response = await HttpGet(`https://api.github.com/repos/${GITHUB_REPO}/commits/${BRANCH}`);
+        if (response.status !== 200) return;
 
-        const commit = JSON.parse(res.data);
+        const commit = JSON.parse(response.data);
         const latestHash = commit.sha.substring(0, 7);
-        const commitMsg = commit.commit.message.split("\n")[0];
+        const commitMessage = commit.commit.message.split("\n")[0];
 
         let currentHash = "";
         try {
@@ -140,150 +150,170 @@ const CheckForUpdates = async () => {
         } catch {}
 
         if (currentHash === latestHash) {
-            console.log(`${C.green}✓${C.reset} Up to date ${C.dim}(${latestHash})${C.reset}\n`);
+            console.log(`${COLORS.green}✓${COLORS.reset} Up to date ${COLORS.dim}(${latestHash})${COLORS.reset}\n`);
             return;
         }
 
-        console.log(`\n${C.yellow}╔════════════════════════════════════════╗${C.reset}`);
-        console.log(`${C.yellow}║${C.reset}         ${C.bright}UPDATE AVAILABLE!${C.reset}              ${C.yellow}║${C.reset}`);
-        console.log(`${C.yellow}╚════════════════════════════════════════╝${C.reset}\n`);
+        console.log(`\n${COLORS.yellow}╔════════════════════════════════════════╗${COLORS.reset}`);
+        console.log(`${COLORS.yellow}║${COLORS.reset}           ${COLORS.bright}UPDATE AVAILABLE!${COLORS.reset}            ${COLORS.yellow}║${COLORS.reset}`);
+        console.log(`${COLORS.yellow}╚════════════════════════════════════════╝${COLORS.reset}\n`);
 
-        if (currentHash) console.log(`  ${C.dim}Current:${C.reset} ${currentHash}`);
-        console.log(`  ${C.dim}Latest:${C.reset}  ${C.green}${latestHash}${C.reset}`);
-        console.log(`  ${C.dim}Changes:${C.reset} ${commitMsg}\n`);
+        if (currentHash) console.log(`  ${COLORS.dim}Current:${COLORS.reset} ${currentHash}`);
+        console.log(`  ${COLORS.dim}Latest:${COLORS.reset}  ${COLORS.green}${latestHash}${COLORS.reset}`);
+        console.log(`  ${COLORS.dim}Changes:${COLORS.reset} ${commitMessage}\n`);
 
-        const answer = Ask(`${C.yellow}Update now?${C.reset} (y/n): `);
+        const answer = Ask(`${COLORS.yellow}Update now?${COLORS.reset} (y/n): `);
         if (!["y", "yes"].includes(answer.toLowerCase().trim())) {
-            console.log(`${C.dim}Skipped. Run again to update later.${C.reset}\n`);
+            console.log(`${COLORS.dim}Skipped. Run again to update later.${COLORS.reset}\n`);
             return;
         }
 
         const tempDir = path.join(__dirname, ".update_temp");
         const zipPath = path.join(tempDir, "update.zip");
 
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, {
-            recursive: true
-        });
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-        console.log(`\n  ${C.cyan}Downloading latest code...${C.reset}`);
+        console.log(`\n  ${COLORS.cyan}Downloading latest code...${COLORS.reset}`);
         await DownloadFile(`https://github.com/${GITHUB_REPO}/archive/refs/heads/${BRANCH}.zip`, zipPath);
 
-        console.log(`  ${C.cyan}Extracting...${C.reset}`);
+        console.log(`  ${COLORS.cyan}Extracting...${COLORS.reset}`);
         const AdmZip = require("adm-zip");
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(tempDir, true);
 
-        const folders = fs.readdirSync(tempDir, {
-            withFileTypes: true
-        }).filter(e => e.isDirectory());
+        const folders = fs.readdirSync(tempDir, { withFileTypes: true }).filter(entry => entry.isDirectory());
         if (folders.length === 0) throw new Error("Extraction failed");
 
-        const srcDir = path.join(tempDir, folders[0].name);
+        const sourceDir = path.join(tempDir, folders[0].name);
+        const preserveList = ["node_modules", "Data", ".git", ".update_temp"];
 
-        const preserve = ["node_modules", "Data", ".git", ".update_temp"];
-
-        console.log(`  ${C.cyan}Installing update...${C.reset}`);
-        const copyRecursive = (src, dest) => {
-            if (!fs.existsSync(dest)) fs.mkdirSync(dest, {
-                recursive: true
-            });
-            for (const item of fs.readdirSync(src, {
-                    withFileTypes: true
-                })) {
-                if (preserve.includes(item.name)) continue;
-                const s = path.join(src, item.name),
-                    d = path.join(dest, item.name);
-                item.isDirectory() ? copyRecursive(s, d) : fs.copyFileSync(s, d);
+        console.log(`  ${COLORS.cyan}Installing update...${COLORS.reset}`);
+        
+        const copyRecursive = (source, dest) => {
+            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+            for (const item of fs.readdirSync(source, { withFileTypes: true })) {
+                if (preserveList.includes(item.name)) continue;
+                const sourcePath = path.join(source, item.name);
+                const destPath = path.join(dest, item.name);
+                if (item.isDirectory()) {
+                    copyRecursive(sourcePath, destPath);
+                } else {
+                    fs.copyFileSync(sourcePath, destPath);
+                }
             }
         };
-        copyRecursive(srcDir, __dirname);
-
+        
+        copyRecursive(sourceDir, __dirname);
         fs.writeFileSync(HASH_FILE, latestHash, "utf8");
+        fs.rmSync(tempDir, { recursive: true, force: true });
 
-        fs.rmSync(tempDir, {
-            recursive: true,
-            force: true
-        });
-
-        console.log(`  ${C.cyan}Checking dependencies...${C.reset}`);
+        console.log(`  ${COLORS.cyan}Checking dependencies...${COLORS.reset}`);
         try {
-            execSync("npm install", {
-                stdio: "pipe"
-            });
+            execSync("npm install", { stdio: "pipe" });
         } catch {}
 
-        console.log(`\n${C.green}✓ Updated to ${latestHash}!${C.reset}`);
-        console.log(`${C.yellow}Restarting...${C.reset}\n`);
+        console.log(`\n${COLORS.green}Updated to ${latestHash}!${COLORS.reset}`);
+        console.log(`${COLORS.yellow}Restarting...${COLORS.reset}\n`);
 
         const args = process.argv.slice(1);
-        require("child_process").spawn(process.argv[0], args, {
-            stdio: "inherit",
-            detached: true
-        });
+        require("child_process").spawn(process.argv[0], args, { stdio: "inherit", detached: true });
         process.exit(0);
 
-    } catch (e) {
-        console.log(`${C.dim}Update check failed: ${e.message}${C.reset}\n`);
+    } catch (error) {
+        console.log(`${COLORS.dim}Update check failed: ${error.message}${COLORS.reset}\n`);
     }
 };
 
 const PrintBanner = () => {
-    console.log(`${C.bright}${C.cyan}╔═══════════════════════════════════════════════════════════════════╗${C.reset}`);
-    console.log(`${C.bright}${C.cyan}║${C.reset}                         EXP Chest Opener                          ${C.bright}${C.cyan}║${C.reset}`);
-    console.log(`${C.bright}${C.cyan}║${C.reset}                            ${C.dim}by @Jxnt${C.reset}                               ${C.bright}${C.cyan}║${C.reset}`);
-    console.log(`${C.bright}${C.cyan}╚═══════════════════════════════════════════════════════════════════╝${C.reset}\n`);
+    console.log(`${COLORS.bright}${COLORS.cyan}╔═══════════════════════════════════════════════════════════════════╗${COLORS.reset}`);
+    console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}                         ${COLORS.bright}EXP Chest Opener${COLORS.reset}                          ${COLORS.bright}${COLORS.cyan}║${COLORS.reset}`);
+    console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}                            ${COLORS.dim}by @Jxnt${COLORS.reset}                               ${COLORS.bright}${COLORS.cyan}║${COLORS.reset}`);
+    console.log(`${COLORS.bright}${COLORS.cyan}╚═══════════════════════════════════════════════════════════════════╝${COLORS.reset}\n`);
 };
 
-let isDisplaying = false,
-    lastDisplay = 0;
-const GenBar = (cur, init) => {
-    const pct = init > 0 ? (cur / init) * 100 : 0;
-    const filled = Math.max(0, Math.min(40, Math.floor((cur / init) * 40)));
-    const color = pct < 25 ? C.red : pct < 50 ? C.yellow : C.green;
-    return `${color}${"█".repeat(filled)}${C.gray}${"░".repeat(40 - filled)}${C.reset} ${C.bright}${pct.toFixed(1)}%${C.reset}`;
+let isDisplaying = false;
+let lastDisplayTime = 0;
+
+const GenerateEXPBar = (current, initial) => {
+    const percentage = initial > 0 ? (current / initial) * 100 : 0;
+    const filledWidth = Math.max(0, Math.min(40, Math.floor((current / initial) * 40)));
+    const color = percentage < 25 ? COLORS.red : percentage < 50 ? COLORS.yellow : COLORS.green;
+    return `${color}${"█".repeat(filledWidth)}${COLORS.gray}${"░".repeat(40 - filledWidth)}${COLORS.reset} ${COLORS.bright}${percentage.toFixed(1)}%${COLORS.reset}`;
 };
 
-const GetRewardValue = (txt) => {
-    const n = txt.toUpperCase();
-    if (n.includes("HUGE REWARD")) return 25_000_000;
-    if (n.includes("4 BILLION")) return 4_000_000_000;
-    if (n.includes("EXP") || n.includes("GAME CARD") || n.includes("$")) return 0;
-    const m = txt.match(/([0-9,]+)/);
-    if (m) {
-        const v = parseInt(m[1].replace(/,/g, ""), 10);
-        if (v >= 1000) return v;
+const GetRewardValue = (rewardText) => {
+    const normalized = rewardText.toUpperCase();
+    if (normalized.includes("HUGE REWARD")) return 25_000_000;
+    if (normalized.includes("4 BILLION")) return 4_000_000_000;
+    if (normalized.includes("EXP") || normalized.includes("GAME CARD") || normalized.includes("$")) return 0;
+    const match = rewardText.match(/([0-9,]+)/);
+    if (match) {
+        const value = parseInt(match[1].replace(/,/g, ""), 10);
+        if (value >= 1000) return value;
     }
     return 0;
 };
 
 const DisplayUI = () => {
     const now = Date.now();
-    if (isDisplaying || now - lastDisplay < 200) return;
+    if (isDisplaying || now - lastDisplayTime < 200) return;
     isDisplaying = true;
-    lastDisplay = now;
+    lastDisplayTime = now;
+
     ClearConsole();
+
     const elapsed = now - Stats.StartTime;
-    const rate = Stats.TotalOpened > 0 ? (Stats.TotalOpened / (elapsed / 3.6e6)).toFixed(0) : "0";
-    const gemRate = Stats.TotalGems > 0 ? FormatShort(Stats.TotalGems / (elapsed / 3.6e6)) : "0";
+    const chestRate = Stats.TotalOpened > 0 ? (Stats.TotalOpened / (elapsed / 3.6e6)).toFixed(0) : "0";
+    const gemRate = Stats.TotalGems > 0 ? FormatShortNumber(Stats.TotalGems / (elapsed / 3.6e6)) : "0";
+
     PrintBanner();
-    const status = Stats.IsRunning ? `${C.green}● ACTIVE` : `${C.red}● STOPPED`;
-    console.log(`  ${C.gray}┌─ Status${C.reset}         ${status}${C.reset}`);
-    console.log(`  ${C.gray}├─ Runtime${C.reset}        ${C.bright}${FormatTime(elapsed)}${C.reset}`);
-    console.log(`  ${C.gray}├─ Chests${C.reset}         ${C.bright}${C.yellow}${FormatNumber(Stats.TotalOpened)}${C.reset} ${C.dim}(${rate}/hr)${C.reset}`);
-    console.log(`  ${C.gray}└─ Gems${C.reset}           ${C.bright}${C.green}${FormatShort(Stats.TotalGems)}${C.reset} ${C.dim}(${gemRate}/hr)${C.reset}\n`);
-    console.log(`  ${C.blue}${C.bright}------ EXP TRACKER ------${C.reset}\n`);
-    console.log(`  ${GenBar(Stats.CurrentEXP, Stats.InitialEXP)}`);
-    console.log(`  ${C.gray}Current:${C.reset} ${C.bright}${FormatNumber(Stats.CurrentEXP)} EXP${C.reset} ${C.dim}(${Stats.ChestsRemaining} chests)${C.reset}`);
-    console.log(`  ${C.gray}Gained:${C.reset}  ${C.green}+${FormatNumber(Stats.EXPGained)}${C.reset}  ${C.gray}Spent:${C.reset} ${C.red}-${FormatShort(Stats.EXPSpent)}${C.reset}\n`);
-    console.log(`  ${C.bright}${C.blue}------ REWARDS ------${C.reset}\n`);
-    if (Stats.LastReward) console.log(`  ${C.gray}Last:${C.reset} ${Stats.LastReward}\n`);
-    if (Object.keys(Stats.Rewards).length === 0) {
-        console.log(`  ${C.dim}No rewards yet...${C.reset}\n`);
-    } else {
-        Object.entries(Stats.Rewards).sort((a, b) => GetRewardValue(b[0]) - GetRewardValue(a[0]))
-            .forEach(([r, c]) => console.log(`  ${C.cyan}${c}x${C.reset} (${((c / Stats.TotalOpened) * 100).toFixed(2)}%) ${r}`));
-        console.log();
+
+    const status = Stats.IsRunning ? `${COLORS.green}● ACTIVE` : `${COLORS.red}● STOPPED`;
+    console.log(`  ${COLORS.gray}┌─ Status${COLORS.reset}         ${status}${COLORS.reset}`);
+    console.log(`  ${COLORS.gray}├─ Runtime${COLORS.reset}        ${COLORS.bright}${FormatTime(elapsed)}${COLORS.reset}`);
+    console.log(`  ${COLORS.gray}├─ Chests${COLORS.reset}         ${COLORS.bright}${COLORS.yellow}${FormatNumber(Stats.TotalOpened)}${COLORS.reset} ${COLORS.dim}(${chestRate}/hr) (Total: ${FormatNumber(Stats.AllTimeChestsOpened + Stats.TotalOpened)})${COLORS.reset}`);
+    console.log(`  ${COLORS.gray}└─ Gems${COLORS.reset}           ${COLORS.bright}${COLORS.green}${FormatShortNumber(Stats.TotalGems)}${COLORS.reset} ${COLORS.dim}(${gemRate}/hr)${COLORS.reset}\n`);
+
+    console.log(`  ${COLORS.blue}${COLORS.bright}------ EXP TRACKER ------${COLORS.reset}\n`);
+    console.log(`  ${GenerateEXPBar(Stats.CurrentEXP, Stats.InitialEXP)}`);
+    console.log(`  ${COLORS.gray}Current:${COLORS.reset} ${COLORS.bright}${FormatNumber(Stats.CurrentEXP)} EXP${COLORS.reset} ${COLORS.dim}(${Stats.ChestsRemaining} chests)${COLORS.reset}`);
+    console.log(`  ${COLORS.gray}Gained:${COLORS.reset}  ${COLORS.bright}${COLORS.green}+${FormatNumber(Stats.EXPGained)}${COLORS.reset} ${COLORS.dim}(Total: ${FormatShortNumber(Stats.AllTimeEXPGained + Stats.EXPGained)})${COLORS.reset}`);
+    console.log(`  ${COLORS.gray}Spent:${COLORS.reset}   ${COLORS.bright}${COLORS.red}-${FormatShortNumber(Stats.EXPSpent)}${COLORS.reset} ${COLORS.dim}(Total: ${FormatShortNumber(Stats.AllTimeEXPSpent + Stats.EXPSpent)})${COLORS.reset}\n`);
+
+    console.log(`  ${COLORS.bright}${COLORS.blue}------ REWARDS ------${COLORS.reset}\n`);
+
+    if (Stats.LastReward) {
+        console.log(`  ${COLORS.gray}Last:${COLORS.reset} ${Stats.LastReward}\n`);
     }
+
+    if (Object.keys(Stats.Rewards).length === 0) {
+        console.log(`  ${COLORS.dim}No rewards yet...${COLORS.reset}\n`);
+    } else {
+        const sortedRewards = Object.entries(Stats.Rewards).sort((a, b) => GetRewardValue(b[0]) - GetRewardValue(a[0]));
+        sortedRewards.forEach(([reward, count]) => {
+            const barLength = Math.min(25, Math.floor((count / Stats.TotalOpened) * 25));
+            const bar = "█".repeat(barLength) + "░".repeat(25 - barLength);
+            const percentage = (count / Stats.TotalOpened) * 100;
+
+            let percentageString;
+            if (percentage >= 10) {
+                percentageString = percentage.toFixed(1);
+            } else if (percentage >= 1) {
+                percentageString = percentage.toFixed(2);
+            } else if (percentage >= 0.1) {
+                percentageString = percentage.toFixed(3);
+            } else if (percentage >= 0.01) {
+                percentageString = percentage.toFixed(4);
+            } else {
+                percentageString = percentage.toFixed(6);
+            }
+
+            const totalCount = (Stats.AllTimeRewards[reward] || 0) + count;
+            console.log(`  ${COLORS.cyan}${bar}${COLORS.reset} ${COLORS.bright}${count}x${COLORS.reset} ${COLORS.dim}(Total: ${totalCount}) (${percentageString}%)${COLORS.reset}`);
+            console.log(`  ${reward}\n`);
+        });
+    }
+
     isDisplaying = false;
 };
 
@@ -294,32 +324,35 @@ const LoadToken = () => {
         return null;
     }
 };
-const SaveToken = (t) => {
+
+const SaveToken = (token) => {
     try {
-        fs.writeFileSync(TOKEN_FILE, t, "utf8");
-        console.log(`${C.green}✓${C.reset} Token saved!`);
+        fs.writeFileSync(TOKEN_FILE, token, "utf8");
+        console.log(`${COLORS.green}✓${COLORS.reset} Token saved!`);
     } catch {}
 };
+
 const LoadRewards = () => {
     try {
         if (fs.existsSync(DATA_FILE)) {
-            const d = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-            Stats.AllTimeRewards = d.Rewards || {};
-            Stats.AllTimeGems = d.TotalGems || 0;
-            Stats.AllTimeEXPSpent = d.TotalEXPSpent || 0;
-            Stats.AllTimeEXPGained = d.TotalEXPGained || 0;
-            Stats.AllTimeChestsOpened = d.TotalChestsOpened || 0;
+            const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+            Stats.AllTimeRewards = data.Rewards || {};
+            Stats.AllTimeGems = data.TotalGems || 0;
+            Stats.AllTimeEXPSpent = data.TotalEXPSpent || 0;
+            Stats.AllTimeEXPGained = data.TotalEXPGained || 0;
+            Stats.AllTimeChestsOpened = data.TotalChestsOpened || 0;
         }
     } catch {}
 };
+
 const SaveRewards = () => {
     try {
-        const merged = {
-            ...Stats.AllTimeRewards
-        };
-        for (const [r, c] of Object.entries(Stats.Rewards)) merged[r] = (merged[r] || 0) + c;
+        const mergedRewards = { ...Stats.AllTimeRewards };
+        for (const [reward, count] of Object.entries(Stats.Rewards)) {
+            mergedRewards[reward] = (mergedRewards[reward] || 0) + count;
+        }
         fs.writeFileSync(DATA_FILE, JSON.stringify({
-            Rewards: merged,
+            Rewards: mergedRewards,
             TotalGems: Stats.AllTimeGems + Stats.TotalGems,
             TotalEXPSpent: Stats.AllTimeEXPSpent + Stats.EXPSpent,
             TotalEXPGained: Stats.AllTimeEXPGained + Stats.EXPGained,
@@ -331,94 +364,138 @@ const SaveRewards = () => {
 const GetToken = async () => {
     ClearConsole();
     PrintBanner();
-    const saved = LoadToken();
-    if (saved) {
-        const use = Ask(`${C.gray}Use saved token?${C.reset} (y/n): `);
-        if (["y", "yes"].includes(use.toLowerCase())) return saved;
+
+    const savedToken = LoadToken();
+    if (savedToken) {
+        const useSaved = Ask(`${COLORS.gray}Use saved token?${COLORS.reset} (y/n): `);
+        if (["y", "yes"].includes(useSaved.toLowerCase())) {
+            return savedToken;
+        }
         console.log();
     }
-    console.log(`${C.yellow}!${C.reset} ${C.bright}Enter your Discord Token.${C.reset}\n`);
-    const token = AskHidden(`${C.gray}Token:${C.reset} `);
+
+    console.log(`${COLORS.yellow}!${COLORS.reset} ${COLORS.bright}Enter your Discord Token.${COLORS.reset}\n`);
+    const token = AskHidden(`${COLORS.gray}Token:${COLORS.reset} `);
+
     if (!token?.trim()) {
-        console.log(`\n${C.red}✗${C.reset} Invalid token`);
+        console.log(`\n${COLORS.red}✗${COLORS.reset} Invalid token`);
         process.exit(1);
     }
-    const save = Ask(`${C.gray}Save token?${C.reset} (y/n): `);
-    if (["y", "yes"].includes(save.toLowerCase())) SaveToken(token);
+
+    const saveToken = Ask(`${COLORS.gray}Save token?${COLORS.reset} (y/n): `);
+    if (["y", "yes"].includes(saveToken.toLowerCase())) {
+        SaveToken(token);
+    }
+
     return token.trim();
 };
 
-let pendingResolve = null,
-    pendingTimeout = null;
-const Strip = (t) => t.replace(/<a?:[^:>]+:\d+>/g, "");
-const Norm = (t) => Strip(t).replace(/[*_~`]/g, "").replace(/\s+/g, " ").trim();
-const ParseReward = (d) => {
-    if (d.embeds?.[0]?.description) {
-        const t = Norm(d.embeds[0].description);
-        if (t) return t;
+let pendingRewardResolve = null;
+let pendingRewardTimeout = null;
+
+const StripDiscordEmojis = (text) => {
+    return text.replace(/<a?:[^:>]+:\d+>/g, "");
+};
+
+const NormalizeText = (text) => {
+    return StripDiscordEmojis(text).replace(/[*_~`]/g, "").replace(/\s+/g, " ").trim();
+};
+
+const ParseReward = (messageData) => {
+    if (messageData.embeds?.[0]?.description) {
+        const text = NormalizeText(messageData.embeds[0].description);
+        if (text) return text;
     }
-    if (d.embeds?.[0]?.title) {
-        const t = Norm(d.embeds[0].title);
-        if (t) return t;
+    if (messageData.embeds?.[0]?.title) {
+        const text = NormalizeText(messageData.embeds[0].title);
+        if (text) return text;
     }
-    if (d.content) {
-        const t = Norm(d.content.split("\n")[0]);
-        if (t) return t;
+    if (messageData.content) {
+        const text = NormalizeText(messageData.content.split("\n")[0]);
+        if (text) return text;
     }
     return "Unknown reward";
 };
-const ParseEXP = (d) => {
-    const m = (d.content || "").match(/([0-9,]+)\s*EXP/i) || `${d.embeds?.[0]?.title || ""} ${d.embeds?.[0]?.description || ""}`.match(/([0-9,]+)\s*EXP/i);
-    return m ? parseInt(m[1].replace(/,/g, ""), 10) : 0;
-};
-const WaitForReward = () => new Promise((resolve) => {
-    if (pendingTimeout) clearTimeout(pendingTimeout);
-    pendingResolve = resolve;
-    pendingTimeout = setTimeout(() => {
-        if (pendingResolve === resolve) pendingResolve = null;
-        pendingTimeout = null;
-        resolve(null);
-    }, 7000);
-});
 
-client.on("raw", (pkt) => {
-    if (pkt.t !== "MESSAGE_CREATE" || !pendingResolve) return;
-    const d = pkt.d;
-    if (d.channel_id !== CONFIG.CHANNEL_ID || d.author?.id !== CONFIG.EXP_BOT_ID) return;
-    if ((d.flags & 64) === 0 || d.interaction_metadata?.user?.id !== client.user?.id) return;
-    const refId = d.message_reference?.message_id,
-        intId = d.interaction_metadata?.interacted_message_id;
-    if (refId !== CONFIG.MESSAGE_ID && intId !== CONFIG.MESSAGE_ID) return;
-    const txt = ParseReward(d),
-        exp = txt.toLowerCase().includes("exp") ? ParseEXP(d) : 0;
-    const full = `${Norm(d.content || "")} ${Norm(d.embeds?.[0]?.description || "")}`.toLowerCase();
-    const resolve = pendingResolve;
-    pendingResolve = null;
-    if (pendingTimeout) {
-        clearTimeout(pendingTimeout);
-        pendingTimeout = null;
+const ParseEXP = (messageData) => {
+    const contentMatch = (messageData.content || "").match(/([0-9,]+)\s*EXP/i);
+    if (contentMatch) {
+        return parseInt(contentMatch[1].replace(/,/g, ""), 10);
     }
+
+    const embedText = `${messageData.embeds?.[0]?.title || ""} ${messageData.embeds?.[0]?.description || ""}`;
+    const embedMatch = embedText.match(/([0-9,]+)\s*EXP/i);
+    if (embedMatch) {
+        return parseInt(embedMatch[1].replace(/,/g, ""), 10);
+    }
+
+    return 0;
+};
+
+const WaitForReward = () => {
+    return new Promise((resolve) => {
+        if (pendingRewardTimeout) clearTimeout(pendingRewardTimeout);
+        pendingRewardResolve = resolve;
+        pendingRewardTimeout = setTimeout(() => {
+            if (pendingRewardResolve === resolve) pendingRewardResolve = null;
+            pendingRewardTimeout = null;
+            resolve(null);
+        }, 7000);
+    });
+};
+
+client.on("raw", (packet) => {
+    if (packet.t !== "MESSAGE_CREATE" || !pendingRewardResolve) return;
+
+    const messageData = packet.d;
+
+    if (messageData.channel_id !== CONFIG.CHANNEL_ID) return;
+    if (messageData.author?.id !== CONFIG.EXP_BOT_ID) return;
+    if ((messageData.flags & 64) === 0) return;
+    if (messageData.interaction_metadata?.user?.id !== client.user?.id) return;
+
+    const referenceId = messageData.message_reference?.message_id;
+    const interactedId = messageData.interaction_metadata?.interacted_message_id;
+    if (referenceId !== CONFIG.MESSAGE_ID && interactedId !== CONFIG.MESSAGE_ID) return;
+
+    const rewardText = ParseReward(messageData);
+    const expGained = rewardText.toLowerCase().includes("exp") ? ParseEXP(messageData) : 0;
+    const fullText = `${NormalizeText(messageData.content || "")} ${NormalizeText(messageData.embeds?.[0]?.description || "")}`.toLowerCase();
+
+    const resolve = pendingRewardResolve;
+    pendingRewardResolve = null;
+
+    if (pendingRewardTimeout) {
+        clearTimeout(pendingRewardTimeout);
+        pendingRewardTimeout = null;
+    }
+
     resolve({
-        rewardText: txt,
-        expGained: exp,
-        isCooldown: full.includes("cooldown"),
-        isNoEXP: full.includes("don't have enough")
+        rewardText: rewardText,
+        expGained: expGained,
+        isCooldown: fullText.includes("cooldown"),
+        isNoEXP: fullText.includes("don't have enough")
     });
 });
 
 const GetInitialEXP = async () => {
     try {
-        const ch = await client.channels.fetch(CONFIG.CHANNEL_ID);
-        const msg = await ch.messages.fetch(CONFIG.MESSAGE_ID);
-        const btn = msg.components?.[0]?.components?.[0];
-        if (!btn) return 0;
-        const promise = WaitForReward();
-        await msg.clickButton(btn.customId);
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID);
+        const message = await channel.messages.fetch(CONFIG.MESSAGE_ID);
+        const button = message.components?.[0]?.components?.[0];
+
+        if (!button) return 0;
+
+        const rewardPromise = WaitForReward();
+        await message.clickButton(button.customId);
         await Sleep(3000);
-        const res = await promise;
-        if (res?.rewardText) {
-            const m = res.rewardText.match(/Balance:\s*([0-9,]+)/i) || res.rewardText.match(/([0-9,]+)/);
-            if (m) return parseInt(m[1].replace(/,/g, ""), 10);
+
+        const result = await rewardPromise;
+        if (result?.rewardText) {
+            const match = result.rewardText.match(/Balance:\s*([0-9,]+)/i) || result.rewardText.match(/([0-9,]+)/);
+            if (match) {
+                return parseInt(match[1].replace(/,/g, ""), 10);
+            }
         }
         return 0;
     } catch {
@@ -428,43 +505,54 @@ const GetInitialEXP = async () => {
 
 const OpenChest = async () => {
     try {
-        const ch = await client.channels.fetch(CONFIG.CHANNEL_ID);
-        const msg = await ch.messages.fetch(CONFIG.MESSAGE_ID);
-        const btns = msg.components?.[0]?.components;
-        const btn = btns?.find((c) => c.label === "Open Chest") || btns?.[1];
-        if (!btn) return false;
-        const promise = WaitForReward();
-        await msg.clickButton(btn.customId);
-        const res = await promise;
-        if (!res) {
-            if (++Stats.FailedAttempts >= Stats.MaxFailedAttempts) {
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID);
+        const message = await channel.messages.fetch(CONFIG.MESSAGE_ID);
+        const buttons = message.components?.[0]?.components;
+        const openButton = buttons?.find((button) => button.label === "Open Chest") || buttons?.[1];
+
+        if (!openButton) return false;
+
+        const rewardPromise = WaitForReward();
+        await message.clickButton(openButton.customId);
+        const result = await rewardPromise;
+
+        if (!result) {
+            Stats.FailedAttempts++;
+            if (Stats.FailedAttempts >= Stats.MaxFailedAttempts) {
                 Stats.IsRunning = false;
                 SaveRewards();
                 process.exit(0);
             }
             return false;
         }
-        if (res.isCooldown) return false;
-        if (res.isNoEXP) {
+
+        if (result.isCooldown) return false;
+
+        if (result.isNoEXP) {
             Stats.IsRunning = false;
             SaveRewards();
             process.exit(0);
         }
-        if (res.rewardText.toLowerCase().includes("recent winners")) return false;
+
+        if (result.rewardText.toLowerCase().includes("recent winners")) return false;
+
         Stats.FailedAttempts = 0;
-        Stats.Rewards[res.rewardText] = (Stats.Rewards[res.rewardText] || 0) + 1;
-        Stats.LastReward = res.rewardText;
+        Stats.Rewards[result.rewardText] = (Stats.Rewards[result.rewardText] || 0) + 1;
+        Stats.LastReward = result.rewardText;
         Stats.TotalOpened++;
-        Stats.TotalGems += GetRewardValue(res.rewardText);
+        Stats.TotalGems += GetRewardValue(result.rewardText);
         Stats.CurrentEXP -= CONFIG.CHEST_COST;
         Stats.EXPSpent += CONFIG.CHEST_COST;
-        Stats.EXPGained += res.expGained;
-        Stats.CurrentEXP += res.expGained;
+        Stats.EXPGained += result.expGained;
+        Stats.CurrentEXP += result.expGained;
         Stats.ChestsRemaining = Math.floor(Stats.CurrentEXP / CONFIG.CHEST_COST);
+
         SaveRewards();
         return true;
+
     } catch {
-        if (++Stats.FailedAttempts >= Stats.MaxFailedAttempts) {
+        Stats.FailedAttempts++;
+        if (Stats.FailedAttempts >= Stats.MaxFailedAttempts) {
             Stats.IsRunning = false;
             SaveRewards();
             process.exit(0);
@@ -480,11 +568,13 @@ const MainLoop = async () => {
     Stats.IsRunning = true;
     Stats.StartTime = Date.now();
     DisplayUI();
+
     while (Stats.IsRunning) {
         await OpenChest();
         await Sleep(700);
     }
 };
+
 process.on("SIGINT", () => {
     Stats.IsRunning = false;
     SaveRewards();
@@ -494,19 +584,26 @@ process.on("SIGINT", () => {
 client.on("ready", async () => {
     ClearConsole();
     PrintBanner();
-    console.log(`${C.green}✓${C.reset} Logged in as ${C.bright}${client.user.tag}${C.reset}`);
+
+    console.log(`${COLORS.green}✓${COLORS.reset} Logged in as ${COLORS.bright}${client.user.tag}${COLORS.reset}`);
+
     LoadRewards();
-    let spin = ShowSpinner("Getting EXP...");
-    const exp = await GetInitialEXP();
-    StopSpinner(spin);
-    if (exp > 0) {
-        Stats.InitialEXP = Stats.CurrentEXP = exp;
-        Stats.ChestsRemaining = Math.floor(exp / CONFIG.CHEST_COST);
-        console.log(`${C.green}✓${C.reset} EXP: ${C.bright}${FormatNumber(exp)}${C.reset} (${Stats.ChestsRemaining} chests)`);
+
+    let spinner = ShowSpinner("Getting EXP...");
+    const initialEXP = await GetInitialEXP();
+    StopSpinner(spinner);
+
+    if (initialEXP > 0) {
+        Stats.InitialEXP = initialEXP;
+        Stats.CurrentEXP = initialEXP;
+        Stats.ChestsRemaining = Math.floor(initialEXP / CONFIG.CHEST_COST);
+        console.log(`${COLORS.green}✓${COLORS.reset} EXP: ${COLORS.bright}${FormatNumber(initialEXP)}${COLORS.reset} (${Stats.ChestsRemaining} chests)`);
     }
-    spin = ShowSpinner("Starting...");
+
+    spinner = ShowSpinner("Starting...");
     await Sleep(2000);
-    StopSpinner(spin);
+    StopSpinner(spinner);
+
     MainLoop();
 });
 
@@ -514,18 +611,25 @@ client.on("ready", async () => {
     try {
         ClearConsole();
         PrintBanner();
-        console.log(`${C.dim}Checking for updates...${C.reset}\n`);
+
+        console.log(`${COLORS.dim}Checking for updates...${COLORS.reset}\n`);
         await CheckForUpdates();
+
         CONFIG.TOKEN = await GetToken();
         console.log();
-        const spin = ShowSpinner("Logging in...");
-        client.login(CONFIG.TOKEN).then(() => StopSpinner(spin)).catch((e) => {
-            StopSpinner(spin, `${C.red}✗${C.reset} Login failed`);
-            console.log(`${C.red}Error:${C.reset} ${e.message}\n`);
+
+        const spinner = ShowSpinner("Logging in...");
+
+        client.login(CONFIG.TOKEN).then(() => {
+            StopSpinner(spinner);
+        }).catch((error) => {
+            StopSpinner(spinner, `${COLORS.red}✗${COLORS.reset} Login failed`);
+            console.log(`${COLORS.red}Error:${COLORS.reset} ${error.message}\n`);
             process.exit(1);
         });
-    } catch (e) {
-        console.error(`\n${C.red}✗${C.reset} Error:`, e.message);
+
+    } catch (error) {
+        console.error(`\n${COLORS.red}✗${COLORS.reset} Error:`, error.message);
         process.exit(1);
     }
 })();
