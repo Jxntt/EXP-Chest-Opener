@@ -213,10 +213,7 @@ const CheckForUpdates = async () => {
         } catch {}
 
         console.log(`\n${COLORS.green}Updated to ${latestHash}!${COLORS.reset}`);
-        console.log(`${COLORS.yellow}Restarting...${COLORS.reset}\n`);
-
-        const args = process.argv.slice(1);
-        require("child_process").spawn(process.argv[0], args, { stdio: "inherit", detached: true });
+        console.log(`${COLORS.yellow}Please restart the program to apply changes.${COLORS.reset}\n`);
         process.exit(0);
 
     } catch (error) {
