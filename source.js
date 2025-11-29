@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { execSync } = require("child_process");
+const readline = require("readline");
 
 const CONFIG = {
     TOKEN: "",
@@ -37,6 +38,12 @@ const COLORS = {
 };
 
 const Stats = {
+    DryStreaks: {},
+    RewardProbabilities: {
+        "50 BILLION": 0.00001,   // 0.001%
+        "$10 GAME CARD": 0.0001, // 0.01%
+        "4 BILLION": 0.001       // 0.1%
+    },
     TotalOpened: 0,
     Rewards: {},
     AllTimeRewards: {},
@@ -149,7 +156,7 @@ const CheckForUpdates = async () => {
             currentHash = fs.readFileSync(HASH_FILE, "utf8").trim();
         } catch {}
 
-        if (currentHash === latestHash) {
+        if (currentHash === latestHash || !currentHash || currentHash == "") {
             console.log(`${COLORS.green}✓${COLORS.reset} Up to date ${COLORS.dim}(${latestHash})${COLORS.reset}\n`);
             return;
         }
@@ -221,10 +228,51 @@ const CheckForUpdates = async () => {
     }
 };
 
+const GetRewardCategory = (rewardText) => {
+    const normalized = rewardText.toUpperCase();
+    if (normalized.includes("50 BILLION")) return "50 BILLION";
+    if (normalized.includes("GAME CARD")) return "$10 GAME CARD";
+    if (normalized.includes("4 BILLION")) return "4 BILLION";
+    return null;
+};
+
+const CalculatePityOdds = (baseChance, chestsWithout) => {
+    const chanceNotGetting = Math.pow(1 - baseChance, chestsWithout);
+    const allChance = (1 - chanceNotGetting) * 100;
+    
+    return {
+        baseChance: (baseChance * 100).toFixed(4),
+        allChance: allChance.toFixed(2),
+        expectedIn: Math.ceil(1 / baseChance)
+    };
+};
+
+const InitializeDryStreaks = () => {
+    for (const reward in Stats.RewardProbabilities) {
+        if (Stats.DryStreaks[reward] === undefined) {
+            Stats.DryStreaks[reward] = 0;
+        }
+    }
+};
+
+const UpdateDryStreaks = (rewardText) => {
+    const category = GetRewardCategory(rewardText);
+    
+    for (const reward in Stats.DryStreaks) {
+        Stats.DryStreaks[reward]++;
+    }
+    
+    if (category && Stats.DryStreaks[category] !== undefined) {
+        Stats.DryStreaks[category] = 0;
+    }
+};
+
 const PrintBanner = () => {
     console.log(`${COLORS.bright}${COLORS.cyan}╔═══════════════════════════════════════════════════════════════════╗${COLORS.reset}`);
     console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}                         ${COLORS.bright}EXP Chest Opener${COLORS.reset}                          ${COLORS.bright}${COLORS.cyan}║${COLORS.reset}`);
     console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}                            ${COLORS.dim}by @Jxnt${COLORS.reset}                               ${COLORS.bright}${COLORS.cyan}║${COLORS.reset}`);
+    console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}                                                                   ${COLORS.bright}${COLORS.cyan}║${COLORS.reset}`);
+    console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}                   ${COLORS.dim}Wanna Donate? ${COLORS.reset}${COLORS.bright}${COLORS.yellow}/gift Jxnt${COLORS.reset} ${COLORS.bright}${COLORS.red}<3${COLORS.reset}                     ${COLORS.bright}${COLORS.cyan}║${COLORS.reset}`);
     console.log(`${COLORS.bright}${COLORS.cyan}╚═══════════════════════════════════════════════════════════════════╝${COLORS.reset}\n`);
 };
 
@@ -276,6 +324,25 @@ const DisplayUI = () => {
     console.log(`  ${COLORS.gray}Current:${COLORS.reset} ${COLORS.bright}${FormatNumber(Stats.CurrentEXP)} EXP${COLORS.reset} ${COLORS.dim}(${Stats.ChestsRemaining} chests)${COLORS.reset}`);
     console.log(`  ${COLORS.gray}Gained:${COLORS.reset}  ${COLORS.bright}${COLORS.green}+${FormatNumber(Stats.EXPGained)}${COLORS.reset} ${COLORS.dim}(Total: ${FormatShortNumber(Stats.AllTimeEXPGained + Stats.EXPGained)})${COLORS.reset}`);
     console.log(`  ${COLORS.gray}Spent:${COLORS.reset}   ${COLORS.bright}${COLORS.red}-${FormatShortNumber(Stats.EXPSpent)}${COLORS.reset} ${COLORS.dim}(Total: ${FormatShortNumber(Stats.AllTimeEXPSpent + Stats.EXPSpent)})${COLORS.reset}\n`);
+
+    console.log(`  ${COLORS.bright}${COLORS.blue}------ EXPECTED REWARDS ------${COLORS.reset}\n`);
+    if (Stats.TotalOpened === 0) {
+        console.log(`  ${COLORS.dim}No data yet...${COLORS.reset}\n`);
+    } else {
+        const rareRewards = ["50 BILLION", "$10 GAME CARD", "4 BILLION"];
+        
+        rareRewards.forEach(reward => {
+            const dryStreak = Stats.DryStreaks[reward] || 0;
+            const prob = Stats.RewardProbabilities[reward];
+            const odds = CalculatePityOdds(prob, dryStreak);
+            
+            const cappedChance = Math.min(parseFloat(odds.allChance), 99.99).toFixed(2);
+            const chanceText = dryStreak > 0 ? `${COLORS.yellow}${cappedChance}%${COLORS.reset}` : `${COLORS.dim}0.00%${COLORS.reset}`;
+            
+            console.log(`  ${COLORS.bright}${reward}${COLORS.reset}`);
+            console.log(`  ${COLORS.gray}└─${COLORS.reset} ${COLORS.bright}${FormatNumber(dryStreak)}${COLORS.reset} ${COLORS.dim}/ ${FormatNumber(odds.expectedIn)}${COLORS.reset} ${COLORS.gray}│${COLORS.reset} Chance: ${chanceText}\n`);
+        });
+    }
 
     console.log(`  ${COLORS.bright}${COLORS.blue}------ REWARDS ------${COLORS.reset}\n`);
 
@@ -338,6 +405,7 @@ const LoadRewards = () => {
             Stats.AllTimeEXPSpent = data.TotalEXPSpent || 0;
             Stats.AllTimeEXPGained = data.TotalEXPGained || 0;
             Stats.AllTimeChestsOpened = data.TotalChestsOpened || 0;
+            Stats.DryStreaks = data.DryStreaks || {};
         }
     } catch {}
 };
@@ -353,7 +421,8 @@ const SaveRewards = () => {
             TotalGems: Stats.AllTimeGems + Stats.TotalGems,
             TotalEXPSpent: Stats.AllTimeEXPSpent + Stats.EXPSpent,
             TotalEXPGained: Stats.AllTimeEXPGained + Stats.EXPGained,
-            TotalChestsOpened: Stats.AllTimeChestsOpened + Stats.TotalOpened
+            TotalChestsOpened: Stats.AllTimeChestsOpened + Stats.TotalOpened,
+            DryStreaks: Stats.DryStreaks
         }, null, 2), "utf8");
     } catch {}
 };
@@ -544,6 +613,7 @@ const OpenChest = async () => {
         Stats.CurrentEXP += result.expGained;
         Stats.ChestsRemaining = Math.floor(Stats.CurrentEXP / CONFIG.CHEST_COST);
 
+        UpdateDryStreaks(result.rewardText);
         SaveRewards();
         return true;
 
@@ -578,6 +648,16 @@ process.on("SIGINT", () => {
     process.exit(0);
 });
 
+readline.emitKeypressEvents(process.stdin);
+if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.on("keypress", (str, key) => {
+    if (key.name === 'space') {
+        Stats.IsRunning = !Stats.IsRunning;
+        if (Stats.IsRunning) MainLoop();
+        DisplayUI();
+    }
+});
+
 client.on("ready", async () => {
     ClearConsole();
     PrintBanner();
@@ -585,6 +665,7 @@ client.on("ready", async () => {
     console.log(`${COLORS.green}✓${COLORS.reset} Logged in as ${COLORS.bright}${client.user.tag}${COLORS.reset}`);
 
     LoadRewards();
+    InitializeDryStreaks();
 
     let spinner = ShowSpinner("Getting EXP...");
     const initialEXP = await GetInitialEXP();

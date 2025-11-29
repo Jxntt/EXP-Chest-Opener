@@ -55,11 +55,9 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-call npm install debug
 echo.
 echo.
 echo [*] Setup Complete!
 echo [*] You can now run "Start Chest Opener.bat"
 echo.
-
 pause
